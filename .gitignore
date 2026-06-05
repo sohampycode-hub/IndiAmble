@@ -1,0 +1,17 @@
+# Python virtual environments
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Node modules / dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Environmental Secret Tokens
+backend/.env
+frontend/.env
+.env
+
+# System files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-travelGreen: #1E3F20;
+  --color-travelOrange: #E67E22;
+  --color-travelBg: #FAFAFA;
+  --color-travelSlate: #2C3E50;
+  
+  --font-heading: "Poppins", sans-serif;
+  --font-sans: "Inter", sans-serif;
+}
+
+body {
+  background-color: var(--color-travelBg);
+  font-family: var(--font-sans);
+  color: var(--color-travelSlate);
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
