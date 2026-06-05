@@ -34,21 +34,16 @@ genai.configure(api_key=api_key_token)
 
 @app.route('/api/states', methods=['GET'])
 def get_unique_states():
-    """
-    Scans the live Atlas cloud regions collection, extracts all unique state keys, 
-    and returns a clean, alphabetized list for our frontend dropdown selectors.
-    """
     try:
-        # Pull all unique values from the 'state' field inside your active cloud collection
-        unique_states_list = db.regions.distinct("state")
+        # Fetch from your active database field name (adjust "state" to "State" if your database capitalized it)
+        unique_states_list = db.regions.distinct("state") 
         
-        # Clean up any empty strings or invalid values, then alphabetize them nicely
+        # FIX: Ensure everything is stripped of weird spaces, filtered, and sent as standard strings
         filtered_states = sorted([str(s).strip() for s in unique_states_list if s])
         
-        print(f"=== 🗺️ DATABASE STATE LAYER LOG: Detected live states: {filtered_states} ===")
         return jsonify(filtered_states), 200
     except Exception as e:
-        print("🛑 Critical failure inside distinct state compilation query:", str(e))
+        print("Error compiling state names:", str(e))
         return jsonify([]), 200
 
 @app.route('/api/regions/<region_id>', methods=['GET'])
