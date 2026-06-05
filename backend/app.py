@@ -34,16 +34,28 @@ genai.configure(api_key=api_key_token)
 
 @app.route('/api/states', methods=['GET'])
 def get_unique_states():
+    """
+    Scans the live Atlas cloud regions collection, extracts all unique states,
+    and returns a clean, alphabetized flat array of strings for the frontend modal.
+    """
     try:
-        # Fetch from your active database field name (adjust "state" to "State" if your database capitalized it)
-        unique_states_list = db.regions.distinct("state") 
+        # 1. Try querying with lowercase 'state' field name
+        unique_states_list = db.regions.distinct("state")
         
-        # FIX: Ensure everything is stripped of weird spaces, filtered, and sent as standard strings
+        # 2. Fallback check: If 'state' field came back empty, try capitalized 'State'
+        if not unique_states_list:
+            unique_states_list = db.regions.distinct("State")
+            
+        # Clean up any empty entries, strip whitespace, and sort them alphabetized
         filtered_states = sorted([str(s).strip() for s in unique_states_list if s])
         
+        # Debug logger in Render logs so you can see the data moving live
+        print(f"=== LIVE STATE LAYER DATA LOG: Sent states to UI -> {filtered_states} ===")
+        
         return jsonify(filtered_states), 200
+        
     except Exception as e:
-        print("Error compiling state names:", str(e))
+        print("🛑 Critical failure inside distinct state compilation query:", str(e))
         return jsonify([]), 200
 
 @app.route('/api/regions/<region_id>', methods=['GET'])
@@ -78,39 +90,56 @@ def get_region_profile(region_id):
 
 @app.route('/api/search', methods=['GET'])
 def dynamic_catalog_search():
+    """
+    Handles multi-param user searches, category toggles, and state dropdown filter clicks
+    using flexible, case-insensitive regular expressions to perfectly match Atlas cloud strings.
+    """
     try:
-        # Extract frontend filter terms safely
+        # Extract frontend filter terms safely from incoming network request parameters
         search_query = request.args.get("q", "").strip()
         state_filter = request.args.get("state", "").strip()
         trip_type = request.args.get("travel_type", "").strip()
         budget = request.args.get("budget", "").strip()
         duration = request.args.get("duration", "").strip()
 
-        # Construct dynamic MongoDB filtering structure
+        # Construct dynamic MongoDB filtering structural dictionary
         query_filter = {}
 
+        # Name/Keyword Search Matcher
         if search_query:
             query_filter["name"] = {"$regex": search_query, "$options": "i"}
             
-        # FIX: Make the cloud state field lookup completely case-insensitive
+        # FIX: Makes the cloud state field lookup completely case-insensitive
         if state_filter:
-            query_filter["state"] = {"$regex": f"^{state_filter}$", "$options": "i"}
+            # This handles it whether your DB document key is named 'state' or 'State'
+            query_filter["$or"] = [
+                {"state": {"$regex": f"^{state_filter}$", "$options": "i"}},
+                {"State": {"$regex": f"^{state_filter}$", "$options": "i"}}
+            ]
 
+        # Categorization Filter Matchers
         if trip_type:
-            query_filter["trip_type"] = trip_type
+            query_filter["trip_type"] = {"$regex": f"^{trip_type}$", "$options": "i"}
         if budget:
-            query_filter["budget_category"] = budget
+            # Checks against both custom schema naming conventions just in case
+            query_filter["$or"] = [
+                {"budget_category": budget},
+                {"estimated_cost_per_person": {"$regex": budget, "$options": "i"}}
+            ]
         if duration:
             query_filter["duration_category"] = duration
 
+        # Query the cloud database cluster
         matched_results = list(db.regions.find(query_filter))
         
+        # Convert BSON ObjectIds to standard strings so JavaScript JSON parser can read them
         for r in matched_results:
             r['_id'] = str(r['_id'])
 
         return jsonify(matched_results), 200
+        
     except Exception as e:
-        print("Search query processing anomaly:", str(e))
+        print("🛑 Search query processing anomaly logged:", str(e))
         return jsonify([]), 500
 
 # ------------------------------------------------------------------
