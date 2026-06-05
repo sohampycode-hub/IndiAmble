@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, MapPin, SlidersHorizontal, ChevronDown, Compass } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, ChevronDown, Compass, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Home() {
@@ -12,28 +12,31 @@ export default function Home() {
   const [travelType, setTravelType] = useState('');
   const [budget, setBudget] = useState('');
   const [duration, setDuration] = useState('');
+  const [selectedState, setSelectedState] = useState(''); // Stores selected string filter
   
   // UI view state controls
   const [showStateModal, setShowStateModal] = useState(false);
   const [statesList, setStatesList] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedState, setSelectedState] = useState(null);
 
   // Fetch all available states on initialization
   useEffect(() => {
     axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/states`)
-      .then(res => setStatesList(res.data))
+      .then(res => {
+        // Safe check: ensure data is always stored as an array
+        setStatesList(Array.isArray(res.data) ? res.data : []);
+      })
       .catch(err => console.error("Error pulling states structural maps:", err));
   }, []);
 
-  // Trigger search updates whenever text input or selectors modify
+  // Trigger search updates whenever parameters or selected state changes
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       fetchFilteredResults();
     }, 300); // 300ms delay protects against flooding the server while typing
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery, travelType, budget, duration]);
+  }, [searchQuery, travelType, budget, duration, selectedState]);
 
   const fetchFilteredResults = async () => {
     setIsLoading(true);
@@ -41,6 +44,7 @@ export default function Home() {
       const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/search`, {
         params: {
           q: searchQuery,
+          state: selectedState, // Pass selected cloud string filter
           travel_type: travelType,
           budget: budget,
           duration: duration
@@ -52,6 +56,11 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStateSelection = (stateName) => {
+    setSelectedState(stateName);
+    setShowStateModal(false);
   };
 
   return (
@@ -87,10 +96,25 @@ export default function Home() {
             className="bg-travelGreen text-white px-6 py-3 rounded-lg flex items-center justify-center gap-2 font-semibold hover:bg-opacity-95 transition-all cursor-pointer"
           >
             <MapPin size={18} />
-            <span>Browse by State</span>
+            <span>{selectedState ? `State: ${selectedState}` : 'Browse by State'}</span>
             <ChevronDown size={16} />
           </button>
         </div>
+
+        {/* Active State Filter Tag */}
+        {selectedState && (
+          <div className="flex items-center gap-2 mb-4 -mt-2">
+            <span className="text-xs font-bold uppercase text-gray-400">Active Filter:</span>
+            <div className="bg-orange-50 text-travelOrange text-xs font-bold px-3 py-1.5 rounded-full border border-orange-200 flex items-center gap-1.5">
+              <span>{selectedState}</span>
+              <X 
+                size={14} 
+                className="cursor-pointer hover:text-red-600" 
+                onClick={() => setSelectedState('')} 
+              />
+            </div>
+          </div>
+        )}
 
         {/* Filter Toolbar Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
@@ -157,22 +181,19 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {searchResults.map((loc) => {
-              // Extract the raw numerical value out of your "reg_1001" token format safely
-             const cleanId = loc.region_id ? loc.region_id.toString().replace("reg_", "") : loc.id;
+              const cleanId = loc.region_id ? loc.region_id.toString().replace("reg_", "") : loc.id;
 
-             return (
-            <motion.div 
-            key={loc._id}
-            whileHover={{ y: -6 }}
-            className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col cursor-pointer"
-      
-            // CHANGE THIS EXACT LINE: Use clean numerical IDs instead of slugs!
-            onClick={() => navigate(`/region/${cleanId}`)}
-            >
-            <div className="h-48 bg-gray-200 relative overflow-hidden">
-              <img 
-                src={loc.image1 || "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?q=80&w=600"} 
-                alt={loc.name}
+              return (
+                <motion.div 
+                  key={loc._id}
+                  whileHover={{ y: -6 }}
+                  className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 flex flex-col cursor-pointer"
+                  onClick={() => navigate(`/region/${cleanId}`)}
+                >
+                  <div className="h-48 bg-gray-200 relative overflow-hidden">
+                    <img 
+                      src={loc.image1 || "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?q=80&w=600"} 
+                      alt={loc.name}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute top-3 right-3 bg-white/95 text-travelGreen px-2.5 py-1 rounded-md text-xs font-bold shadow-xs">
@@ -215,7 +236,7 @@ export default function Home() {
               <div className="p-5 bg-travelGreen text-white flex justify-between items-center">
                 <h3 className="text-xl font-bold font-heading">Select an Indian State</h3>
                 <button 
-                  onClick={() => { setShowStateModal(false); setSelectedState(null); }}
+                  onClick={() => setShowStateModal(false)}
                   className="text-white/80 hover:text-white text-lg font-bold cursor-pointer"
                 >
                   ✕
@@ -223,54 +244,33 @@ export default function Home() {
               </div>
 
               <div className="p-6 overflow-y-auto flex-1">
-                {!selectedState ? (
-                  <div>
-                    <p className="text-sm text-gray-500 mb-4 font-medium">Select a territory to explore available regions:</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {statesList.map((state) => (
-                        <button
-                          key={state._id}
-                          onClick={() => setSelectedState(state)}
-                          className="p-3 text-left border border-gray-200 rounded-lg hover:border-travelOrange hover:bg-orange-50/30 transition-all font-semibold text-travelSlate flex items-center gap-2 cursor-pointer"
-                        >
-                          <div className="w-2 h-2 rounded-full bg-travelOrange" />
-                          <span>{state.state_name}</span>
-                        </button>
-                      ))}
-                    </div>
+                <p className="text-sm text-gray-500 mb-4 font-medium">Select a territory to explore available regions:</p>
+                
+                {statesList.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    No states found in database collection.
                   </div>
                 ) : (
-                  <div>
-                    <button 
-                      onClick={() => setSelectedState(null)}
-                      className="text-sm text-travelOrange font-bold mb-4 inline-block hover:underline cursor-pointer"
-                    >
-                      ← Back to All States
-                    </button>
-                    <h4 className="font-bold text-lg text-travelSlate mb-3">Regions within {selectedState.state_name}:</h4>
-                    <div className="space-y-2">
-                      {selectedState.regions && selectedState.regions.map((region) => (
-                        <div 
-                          key={region.region_id}
-                          className="p-4 border border-gray-100 rounded-lg bg-gray-50 flex justify-between items-center hover:bg-gray-100/70 transition-all"
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {statesList.map((stateItem, index) => {
+                      // Normalize the data shape safely handles both pure string arrays or object collections
+                      const stateName = typeof stateItem === 'string' ? stateItem : (stateItem.state_name || stateItem.state || "");
+                      
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleStateSelection(stateName)}
+                          className={`p-3 text-left border rounded-lg transition-all font-semibold flex items-center gap-2 cursor-pointer ${
+                            selectedState === stateName 
+                              ? 'border-travelOrange bg-orange-50/50 text-travelOrange' 
+                              : 'border-gray-200 text-travelSlate hover:border-travelOrange hover:bg-orange-50/20'
+                          }`}
                         >
-                          <div>
-                            <h5 className="font-bold text-travelGreen">{region.name}</h5>
-                            <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">{region.description}</p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setShowStateModal(false);
-                              setSelectedState(null);
-                              setSearchQuery(region.name);
-                            }}
-                            className="text-xs bg-travelOrange text-white px-3 py-1.5 rounded-md font-bold hover:bg-opacity-90 cursor-pointer"
-                          >
-                            Explore Region
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                          <div className={`w-2 h-2 rounded-full ${selectedState === stateName ? 'bg-travelOrange animate-pulse' : 'bg-gray-300'}`} />
+                          <span className="truncate">{stateName}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
