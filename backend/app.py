@@ -33,16 +33,23 @@ genai.configure(api_key=api_key_token)
 # -------------------------------------------------------------------------
 
 @app.route('/api/states', methods=['GET'])
-def get_states_catalog():
-    """Returns a structural layout tree of all states and their regions."""
+def get_unique_states():
+    """
+    Scans the live Atlas cloud regions collection, extracts all unique state keys, 
+    and returns a clean, alphabetized list for our frontend dropdown selectors.
+    """
     try:
-        states = list(db.states.find({}))
-        # MongoDB default object IDs cannot convert to JSON automatically, so modify them to strings
-        for s in states:
-            s['_id'] = str(s['_id'])
-        return jsonify(states), 200
+        # Pull all unique values from the 'state' field inside your active cloud collection
+        unique_states_list = db.regions.distinct("state")
+        
+        # Clean up any empty strings or invalid values, then alphabetize them nicely
+        filtered_states = sorted([str(s).strip() for s in unique_states_list if s])
+        
+        print(f"=== 🗺️ DATABASE STATE LAYER LOG: Detected live states: {filtered_states} ===")
+        return jsonify(filtered_states), 200
     except Exception as e:
-        return jsonify({"message": str(e)}), 500
+        print("🛑 Critical failure inside distinct state compilation query:", str(e))
+        return jsonify([]), 200
 
 @app.route('/api/regions/<region_id>', methods=['GET'])
 def get_region_profile(region_id):
@@ -75,59 +82,41 @@ def get_region_profile(region_id):
 # -------------------------------------------------------------------------
 
 @app.route('/api/search', methods=['GET'])
-def query_search_engine():
-    """
-    Queries your local MongoDB Compass regions collection safely based on user filters.
-    Includes robust fallbacks for un-filtered states and exact ampersand handling.
-    """
+def dynamic_catalog_search():
     try:
-        keyword = request.args.get('q', '').strip()
-        travel_type = request.args.get('travel_type', '').strip()
-        budget = request.args.get('budget', '').strip()
-        duration = request.args.get('duration', '').strip()
+        # Extract frontend filter terms safely
+        search_query = request.args.get("q", "").strip()
+        state_filter = request.args.get("state", "").strip()
+        trip_type = request.args.get("travel_type", "").strip()
+        budget = request.args.get("budget", "").strip()
+        duration = request.args.get("duration", "").strip()
 
-        # Initialize an empty search criteria dictionary
-        search_criteria = {}
+        # Construct dynamic MongoDB filtering structure
+        query_filter = {}
 
-        # 1. Handle Keyword Matches Safely using case-insensitive regex
-        if keyword:
-            regex_query = re.compile(re.escape(keyword), re.IGNORECASE)
-            search_criteria["$or"] = [
-                {"name": regex_query},
-                {"state": regex_query},
-                {"description": regex_query}
-            ]
-
-        # 2. Match Travel Companion Type
-        if travel_type:
-            search_criteria["trip_type"] = travel_type.lower()
-
-        # 3. Match Budget Category
-        if budget:
-            budget_alignment_map = {
-                "low-budget": "low-budget",
-                "mid-range": "mid-budget",
-                "premium": "premium-budget"
-            }
-            target_mapped_category = budget_alignment_map.get(budget, budget.lower())
-            search_criteria["budget_category"] = target_mapped_category
-
-        # 4. Match Duration Window
-        if duration:
-            search_criteria["duration_category"] = duration
-
-        # Query the local MongoDB Compass 'regions' collection
-        results = list(db.regions.find(search_criteria))
-        
-        # Convert BSON ObjectIds to strings so they are JSON serializable
-        for item in results:
-            item['_id'] = str(item['_id'])
+        if search_query:
+            query_filter["name"] = {"$regex": search_query, "$options": "i"}
             
-        return jsonify(results), 200
+        # FIX: Make the cloud state field lookup completely case-insensitive
+        if state_filter:
+            query_filter["state"] = {"$regex": f"^{state_filter}$", "$options": "i"}
+
+        if trip_type:
+            query_filter["trip_type"] = trip_type
+        if budget:
+            query_filter["budget_category"] = budget
+        if duration:
+            query_filter["duration_category"] = duration
+
+        matched_results = list(db.regions.find(query_filter))
         
+        for r in matched_results:
+            r['_id'] = str(r['_id'])
+
+        return jsonify(matched_results), 200
     except Exception as e:
-        print(f"Search API Error Logs: {str(e)}")
-        return jsonify({"message": str(e)}), 500
+        print("Search query processing anomaly:", str(e))
+        return jsonify([]), 500
 
 # ------------------------------------------------------------------
 # USER AUTHENTICATION ROUTE ENDPOINTS
