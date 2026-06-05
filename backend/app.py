@@ -353,5 +353,8 @@ def process_ai_travel_agent_recommendation():
         print("Gemini connectivity exception dropped trace error logs:", str(e))
         return jsonify({"reply": "My travel intelligence logs are currently adjusting system calibrations. Let me summarize standard regional paths shortly!"}), 200
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    # Check if running in a cloud production environment, otherwise fallback to 5000 locally
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
