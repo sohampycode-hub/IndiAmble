@@ -120,28 +120,34 @@ def dynamic_catalog_search():
         if trip_type:
             query_filter["trip_type"] = {"$regex": f"^{trip_type}$", "$options": "i"}
             
-        # 4. SMART BUDGET FILTER: Handles text string tokens AND raw numeric amounts simultaneously
+        # 4. TEXT-STRING COMPATIBLE SMART BUDGET FILTER
         if budget:
             if budget == "low-budget":
-                # Matches string label OR checks if raw cost is less than or equal to 5000
                 query_filter["$or"] = [
                     {"budget_category": {"$regex": "^low", "$options": "i"}},
                     {"estimated_cost_per_person": {"$lte": 5000}},
-                    {"avg_cost_per_person": {"$lte": 5000}}
+                    {"avg_cost_per_person": {"$lte": 5000}},
+                    # String checks if numbers got converted to text strings
+                    {"estimated_cost_per_person": {"$regex": "^[1-4][0-9]{3}$|^5000$"}}, 
+                    {"avg_cost_per_person": {"$regex": "^[1-4][0-9]{3}$|^5000$"}}
                 ]
             elif budget == "mid-range":
-                # Matches string label OR checks if raw cost is between 5001 and 15000
                 query_filter["$or"] = [
                     {"budget_category": {"$regex": "^mid", "$options": "i"}},
                     {"estimated_cost_per_person": {"$gt": 5000, "$lte": 15000}},
-                    {"avg_cost_per_person": {"$gt": 5000, "$lte": 15000}}
+                    {"avg_cost_per_person": {"$gt": 5000, "$lte": 15000}},
+                    # String regular expressions matching text patterns between 5001 and 15000
+                    {"estimated_cost_per_person": {"$regex": "^5[0-9]{3}$|^[6-9][0-9]{3}$|^1[0-4][0-9]{3}$|^15000$"}},
+                    {"avg_cost_per_person": {"$regex": "^5[0-9]{3}$|^[6-9][0-9]{3}$|^1[0-4][0-9]{3}$|^15000$"}}
                 ]
             elif budget == "premium":
-                # Matches string label OR checks if raw cost is greater than 15000
                 query_filter["$or"] = [
                     {"budget_category": {"$regex": "^prem|^lux", "$options": "i"}},
                     {"estimated_cost_per_person": {"$gt": 15000}},
-                    {"avg_cost_per_person": {"$gt": 15000}}
+                    {"avg_cost_per_person": {"$gt": 15000}},
+                    # Matches any text numbers starting higher than 15001 or having 5+ digits
+                    {"estimated_cost_per_person": {"$regex": "^1[6-9][0-9]{3}$|^[2-9][0-9]{4}$|^[1-9][0-9]{5}$"}},
+                    {"avg_cost_per_person": {"$regex": "^1[6-9][0-9]{3}$|^[2-9][0-9]{4}$|^[1-9][0-9]{5}$"}}
                 ]
 
         # 5. Duration Window Matcher
