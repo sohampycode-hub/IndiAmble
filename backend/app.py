@@ -92,7 +92,7 @@ def get_region_profile(region_id):
 def dynamic_catalog_search():
     """
     Handles multi-param user searches, category toggles, and state dropdown filter clicks
-    using flexible, case-insensitive regular expressions to perfectly match Atlas cloud strings.
+    using flexible, case-insensitive regular expressions and smart numeric budget boundary matching.
     """
     try:
         # Extract frontend filter terms safely from incoming network request parameters
@@ -105,27 +105,46 @@ def dynamic_catalog_search():
         # Construct dynamic MongoDB filtering structural dictionary
         query_filter = {}
 
-        # Name/Keyword Search Matcher
+        # 1. Name/Keyword Search Matcher
         if search_query:
             query_filter["name"] = {"$regex": search_query, "$options": "i"}
             
-        # FIX: Makes the cloud state field lookup completely case-insensitive
+        # 2. Case-Insensitive State Filter Matcher
         if state_filter:
-            # This handles it whether your DB document key is named 'state' or 'State'
             query_filter["$or"] = [
                 {"state": {"$regex": f"^{state_filter}$", "$options": "i"}},
                 {"State": {"$regex": f"^{state_filter}$", "$options": "i"}}
             ]
 
-        # Categorization Filter Matchers
+        # 3. Travel Type Matcher
         if trip_type:
             query_filter["trip_type"] = {"$regex": f"^{trip_type}$", "$options": "i"}
+            
+        # 4. SMART BUDGET FILTER: Handles text string tokens AND raw numeric amounts simultaneously
         if budget:
-            # Checks against both custom schema naming conventions just in case
-            query_filter["$or"] = [
-                {"budget_category": budget},
-                {"estimated_cost_per_person": {"$regex": budget, "$options": "i"}}
-            ]
+            if budget == "low-budget":
+                # Matches string label OR checks if raw cost is less than or equal to 5000
+                query_filter["$or"] = [
+                    {"budget_category": {"$regex": "^low", "$options": "i"}},
+                    {"estimated_cost_per_person": {"$lte": 5000}},
+                    {"avg_cost_per_person": {"$lte": 5000}}
+                ]
+            elif budget == "mid-range":
+                # Matches string label OR checks if raw cost is between 5001 and 15000
+                query_filter["$or"] = [
+                    {"budget_category": {"$regex": "^mid", "$options": "i"}},
+                    {"estimated_cost_per_person": {"$gt": 5000, "$lte": 15000}},
+                    {"avg_cost_per_person": {"$gt": 5000, "$lte": 15000}}
+                ]
+            elif budget == "premium":
+                # Matches string label OR checks if raw cost is greater than 15000
+                query_filter["$or"] = [
+                    {"budget_category": {"$regex": "^prem|^lux", "$options": "i"}},
+                    {"estimated_cost_per_person": {"$gt": 15000}},
+                    {"avg_cost_per_person": {"$gt": 15000}}
+                ]
+
+        # 5. Duration Window Matcher
         if duration:
             query_filter["duration_category"] = duration
 
